@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Database</title>
+    <link href="./output.css" rel="stylesheet">
+</head>
+<body class="min-h-screen bg-gray-900 text-gray-100">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- Login -->
+        <div class="mb-8">
+            <input type="email" id="emailInput" placeholder="Email" class="p-2 bg-gray-800 border-gray-600 rounded text-gray-100">
+            <button onclick="login()" class="px-4 py-2 bg-primary text-white rounded">Login</button>
+            <button onclick="logout()" class="px-4 py-2 bg-red-600 text-white rounded">Logout</button>
+            <p id="roleInfo" class="text-gray-400"></p>
+        </div>
+
+        <!-- Header -->
+        <h1 class="text-3xl font-bold text-white">Model Database</h1>
+        <p id="modelCount" class="text-gray-400">Loading...</p>
+        <button id="addModelBtn" class="px-4 py-2 bg-primary text-white rounded hidden">Add Model</button>
+        <input type="text" id="searchInput" placeholder="Search..." class="p-2 bg-gray-800 border-gray-600 rounded text-gray-100 w-full mb-6">
+
+        <!-- Grid -->
+        <div id="modelGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modelModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 overflow-y-auto">
+        <div class="flex items-start justify-center min-h-screen pt-4 px-4 pb-20">
+            <div class="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-auto">
+                <div class="flex justify-between items-center p-6 border-b border-gray-700">
+                    <h2 id="modalTitle" class="text-2xl font-bold text-white"></h2>
+                    <button onclick="closeModal()" class="text-gray-300">X</button>
+                </div>
+                <div id="modalContent" class="p-6"></div>
+                <button onclick="editModel()" id="editBtn" class="px-4 py-2 bg-yellow-600 text-white rounded hidden">Edit</button>
+                <button onclick="deleteModel()" id="deleteBtn" class="px-4 py-2 bg-red-600 text-white rounded hidden">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Back to Top -->
+    <button id="backToTop" class="fixed bottom-4 right-4 bg-primary text-white p-2 rounded-full hidden" onclick="window.scrollTo(0,0)">Top</button>
+
+    <script>
+        window.onscroll = () => { document.getElementById('backToTop').classList.toggle('hidden', window.scrollY < 100); };
+
+        let models = [];
+        let currentId = '';
+
+        function login() {
+            const email = document.getElementById('emailInput').value;
+            fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+                .then(res => res.json()).then(data => {
+                    localStorage.setItem('role', data.role);
+                    document.getElementById('roleInfo').textContent = `Role: ${data.role}`;
+                    if (data.role === 'admin') {
+                        document.getElementById('addModelBtn').classList.remove('hidden');
+                        document.getElementById('editBtn').classList.remove('hidden');
+                        document.getElementById('deleteBtn').classList.remove('hidden');
+                    }
+                    fetchModels();
+                });
+        }
+
+        function logout() {
+            fetch('/api/logout', { method: 'POST' }).then(() => {
+                localStorage.removeItem('role');
+                document.getElementById('roleInfo').textContent = 'Logged out';
+                document.getElementById('addModelBtn').classList.add('hidden');
+                document.getElementById('editBtn').classList.add('hidden');
+                document.getElementById('deleteBtn').classList.add('hidden');
+                fetchModels();
+            });
+        }
+
+        async function fetchModels() {
+            const res = await fetch('/api/models');
+            models = await res.json();
+            models.sort((a, b) => a.name.localeCompare(b.name));
+            renderModels(models);
+        }
+
+        function renderModels(data) {
+            document.getElementById('modelGrid').innerHTML = data.map(m => `
+                <div class="bg-gray-800 p-6 rounded-lg cursor-pointer" onclick="openModal('${m._id}')">
+                    <h3 class="text-xl font-bold text-white">${m.name}</h3>
+                </div>
+            `).join('');
+            document.getElementById('modelCount').textContent = `${data.length} models`;
+        }
+
+        function openModal(id) {
+            currentId = id;
+            const model = models.find(m => m._id === id);
+            document.getElementById('modalTitle').textContent = model.name;
+            document.getElementById('modalContent').innerHTML = `
+                <div>Profile: ${model.profile}</div>
+                <div>Pricing: ${model.pricing}</div>
+                <div>Dos & Don'ts: ${model.dosAndDonts}</div>
+                ${model.extraTabs.map(tab => `<div>${tab}</div>`).join('')}
+            `;
+            // Summary
+            const summary = model.profile.match(/([^.!\?]+[.!\?]+)/g).slice(0, 5).join('<li>');  // Simple extraction
+            document.getElementById('summaryList').innerHTML = `<li>${summary}</li>`;
+            document.getElementById('modelModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('modelModal').classList.add('hidden');
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = models.filter(m => m.name.toLowerCase().includes(term) || m.profile.toLowerCase().includes(term));
+            renderModels(filtered);
+            if (filtered.length > 0) {
+                document.getElementById('modelGrid').scrollIntoView();
+            }
+        });
+
+        document.getElementById('addModelBtn').addEventListener('click', () => {
+            // Prompt for format
+            const input = prompt("Add new model named X - Pricing - x, Dos and don'ts - x, Model profile - X");
+            const parts = input.split(' - ');
+            const newModel = {
+                name: parts[0].replace('Add new model named ', ''),
+                pricing: parts[1].replace('Pricing ', ''),
+                dosAndDonts: parts[2].replace('Dos and don\'ts ', ''),
+                profile: parts[3].replace('Model profile ', '')
+            };
+            fetch('/api/models', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newModel) }).then(fetchModels);
+        });
+
+        // Export/Import buttons in index.html
+        document.getElementById('exportJsonBtn').addEventListener('click', () => {
+            fetch('/api/export/json').then(res => res.json()).then(data => {
+                const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'models.json';
+                a.click();
+            });
+        });
+
+        document.getElementById('exportCsvBtn').addEventListener('click', () => {
+            fetch('/api/export/csv').then(res => res.text()).then(data => {
+                const blob = new Blob([data], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'models.csv';
+                a.click();
+            });
+        });
+
+        document.getElementById('importFile').addEventListener('change', (e) => {
+            const formData = new FormData();
+            formData.append('file', e.target.files[0]);
+            fetch('/api/import/csv', { method: 'POST', body: formData }).then(fetchModels);
+        });
+
+        fetchModels();
+    </script>
+</body>
+</html>

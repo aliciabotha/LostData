@@ -21,7 +21,7 @@ app.use(session({
 }));
 app.use(express.static(path.join(__dirname, "public")));
 
-const db = require("./app/models");
+const db = require("./APP/models");
 db.mongoose.connect(process.env.MONGODB_URI).then(() => console.log("DB connected")).catch(err => console.log(err));
 
 app.post("/api/login", (req, res) => {
@@ -43,47 +43,75 @@ const isAdmin = (req, res, next) => {
 const Model = db.models;
 
 app.get("/api/models", async (req, res) => {
-  const models = await Model.find({}).sort({ name: 1 });
-  res.json(models);
+  try {
+    const models = await Model.find({}).sort({ name: 1 });
+    res.json(models);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/models/:id", async (req, res) => {
-  const model = await Model.findById(req.params.id);
-  res.json(model);
+  try {
+    const model = await Model.findById(req.params.id);
+    res.json(model);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/models", isAdmin, async (req, res) => {
-  const model = new Model(req.body);
-  model.history.push({ timestamp: new Date(), action: 'create', user: req.session.user.email, changes: 'Initial creation' });
-  await model.save();
-  res.json(model);
+  try {
+    const model = new Model(req.body);
+    model.history.push({ timestamp: new Date(), action: 'create', user: req.session.user.email, changes: 'Initial creation' });
+    await model.save();
+    res.json(model);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.put("/api/models/:id", isAdmin, async (req, res) => {
-  const model = await Model.findById(req.params.id);
-  model.history.push({ timestamp: new Date(), action: 'update', user: req.session.user.email, changes: Object.keys(req.body) });
-  Object.assign(model, req.body);
-  await model.save();
-  res.json(model);
+  try {
+    const model = await Model.findById(req.params.id);
+    model.history.push({ timestamp: new Date(), action: 'update', user: req.session.user.email, changes: Object.keys(req.body) });
+    Object.assign(model, req.body);
+    await model.save();
+    res.json(model);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.delete("/api/models/:id", isAdmin, async (req, res) => {
-  await Model.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Deleted' });
+  try {
+    await Model.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/export/json", isAdmin, async (req, res) => {
-  const data = await Model.find({});
-  res.json(data);
+  try {
+    const data = await Model.find({});
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/export/csv", isAdmin, async (req, res) => {
-  const data = await Model.find({});
-  const parser = new Parser();
-  const csv = parser.parse(data);
-  res.header("Content-Type", "text/csv");
-  res.attachment("models.csv");
-  res.send(csv);
+  try {
+    const data = await Model.find({});
+    const parser = new Parser();
+    const csv = parser.parse(data);
+    res.header("Content-Type", "text/csv");
+    res.attachment("models.csv");
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post("/api/import/csv", isAdmin, upload.single('file'), (req, res) => {
@@ -96,7 +124,7 @@ app.post("/api/import/csv", isAdmin, upload.single('file'), (req, res) => {
     });
 });
 
-app.get("*", (req, res) => {
+app.get(/^\/(?!api).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
